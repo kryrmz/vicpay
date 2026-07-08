@@ -1,0 +1,31 @@
+# Render Blueprint para el backend de VicPay (plan gratuito, Docker).
+# En Render: New + -> Blueprint -> conecta el repo de GitHub -> Apply.
+# Render inyecta PORT automaticamente (el binario lo lee). JWT_SECRET y
+# PII_ENCRYPTION_KEY se generan solos; DATABASE_URL/DATABASE_DIRECT_URL (de Neon)
+# y CORS_ORIGINS (tu URL de Vercel) se ponen en el dashboard.
+services:
+  - type: web
+    name: vicpay-api
+    runtime: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: OTP_DEV_ECHO
+        value: "false"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PII_ENCRYPTION_KEY
+        generateValue: true
+      # Neon: cadena "pooled" (PgBouncer) para la app.
+      - key: DATABASE_URL
+        sync: false
+      # Neon: cadena directa para migraciones y advisory locks.
+      - key: DATABASE_DIRECT_URL
+        sync: false
+      # Origen exacto de tu frontend en Vercel, p.ej. https://vicpay.vercel.app
+      - key: CORS_ORIGINS
+        sync: false
