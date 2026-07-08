@@ -1,0 +1,26 @@
+# Dependencias
+node_modules/
+vendor/
+
+# Build / salida
+dist/
+build/
+out/
+bin/
+*.exe
+
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Herramientas locales / worktrees (NUNCA versionar)
+.claude/
+.claude/worktrees/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
