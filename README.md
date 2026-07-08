@@ -1,35 +1,75 @@
 # VicPay (nombre de trabajo)
 
-Carpeta de arranque de la nueva super-app financiera de Victor Lobo. Todo lo de esta
-carpeta es punto de partida: el **desarrollo empieza en una sesion aparte**.
+Super-app financiera global de Victor Lobo: billetera multimoneda, pagos QR, envios,
+ahorros y marketplace, construidos sobre un ledger de doble entrada real.
 
 > **"VicPay" es un nombre de trabajo TEMPORAL**, no la marca definitiva. Como marca
 > publica ya esta tomado por terceros (VicPay = Vic.ai / Chainnova y otros), asi que
 > sirve solo como nombre interno del proyecto hasta elegir el definitivo. El nombre y
 > el dominio finales estan en decision: ver [`docs/nombre-y-dominio.md`](docs/nombre-y-dominio.md).
+> El front esta tokenizado para rebrandear con cambiar `frontend/src/styles/tokens.css`.
 
-## Que hay aqui
+## Estructura
 
-| Archivo | Contenido |
+| Ruta | Contenido |
 |---|---|
-| [`docs/nombre-y-dominio.md`](docs/nombre-y-dominio.md) | Investigacion completa de nombre + dominio: shortlist verificada con dominio libre, metodo de verificacion, y la decision pendiente. |
-| [`docs/brief-producto.md`](docs/brief-producto.md) | Que es el producto, alcance, posicionamiento, marca y limite regulatorio. |
-| [`docs/roadmap-arranque.md`](docs/roadmap-arranque.md) | Por donde empezar: que se puede construir ya, que esta bloqueado, y las mejoras prioritarias heredadas de KiramoPay. |
-| `.gitignore` | Listo para cuando se haga `git init` (ignora `.claude/`, secretos, build, etc.). |
+| [`backend/`](backend) | API en Go 1.26 + Postgres: ledger de doble entrada, auth, OTP, KYC, billetera. |
+| [`frontend/`](frontend) | App React 19 + Vite + Tailwind v4 + Capacitor: sistema de diseno, router, onboarding. |
+| [`docs/`](docs) | Brief de producto, roadmap de arranque y decision de nombre/dominio. |
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | CI: gate de verificacion de backend y frontend. |
 
-## Estado actual
+## Backend (`backend/`)
 
-Fase de arranque. Aun NO se ha escrito codigo. Antes de la primera linea hay que
-cerrar estas decisiones:
+Monolito Go con el patron Repository -> Service -> Handler. Piezas principales:
 
-1. **Nombre y dominio finales** (candidatos verificados libres en `docs/nombre-y-dominio.md`).
-2. **Base tecnica**: partir del back/ledger real de KiramoPay (activo probado) vs base
-   nueva desde cero. Recomendacion en `docs/roadmap-arranque.md`.
-3. **Stack** definitivo (propuesta heredada: Go + Postgres para el ledger, front React
-   + Capacitor).
+- **Ledger de doble entrada** (`internal/ledger`, `migrations/0002_ledger.sql`): append-only,
+  con trigger de balance diferido y triggers de inmutabilidad (UPDATE/DELETE prohibidos),
+  idempotencia por clave, locking determinista `FOR UPDATE` y reconciliacion cache-vs-journal.
+- **Auth** (`internal/auth`): Argon2id (OWASP 2024), JWT access/refresh no intercambiables,
+  rotacion de refresh con deteccion de reuso, cookie httpOnly `__Host-` y CSRF montado.
+- **PII cifrada en la app** (`internal/pii`): AES-256-GCM + indice ciego HMAC (subclaves via
+  HKDF), independiente de GUC de sesion para ser seguro bajo PgBouncer transaccional.
+- **OTP real** (`internal/otp`), **KYC progresivo** (`internal/kyc`, nivel 0 sin friccion) y
+  **billetera multimoneda** de lectura (`internal/wallet`).
+
+Comandos (desde `backend/`):
+
+```
+cp .env.example .env
+docker compose up --build       # postgres + pgbouncer + api en :8080
+make verify                     # build + lint + gosec + tests
+make test-integration           # requiere TEST_DB_DSN (Postgres DIRECTO)
+```
+
+Dos DSN separados por diseno: `DATABASE_URL` (pool de la app, puede ir por PgBouncer) y
+`DATABASE_DIRECT_URL` (directo, para migraciones y advisory locks de sesion).
+
+## Frontend (`frontend/`)
+
+SPA React 19 + TypeScript + Vite + Tailwind v4 (tokens en CSS) + Capacitor, con router real
+(`react-router-dom`), manejo del boton atras de Android, dinero en enteros (unidades menores)
+y una unica utilidad de formato, auth con token solo en memoria y cero PII en `localStorage`.
+
+```
+cd frontend
+npm install
+npm run dev                     # http://localhost:5173
+npm run typecheck && npm run lint && npm run test && npm run build
+```
+
+Cuenta sembrada para ver la UI con datos: `+50688888888` / `VicPay#2026`.
+
+## Limite regulatorio
+
+El codigo llega hasta el limite honesto sin degradar a demo: billetera, ledger, QR, ahorros y
+marketplace funcionan de verdad por el ledger. La entrada/salida de dinero real (on-ramp/payout,
+rails locales, VASP, emisor de tarjetas) esta **bloqueada por licencia/partner**, no por codigo.
+Mover dinero real sin via regulatoria resuelta configura captacion ilegal (Ley 7558 art. 116 CR).
+Ver [`docs/brief-producto.md`](docs/brief-producto.md).
 
 ## Referencia
 
-Proyecto previo del mismo dueno: **KiramoPay** (en `../kiramopay`). VicPay reusa sus
-aprendizajes y su activo mas valioso: un ledger de doble entrada real donde el dinero
-se mueve de verdad. Ver el roadmap para que heredar y que mejorar.
+Proyecto previo del mismo dueno: **KiramoPay**. VicPay reusa su ledger de doble entrada y aplica
+las mejoras heredadas de sus auditorias (sesion httpOnly/BFF, OTP real, PgBouncer/PII, router con
+boton atras, tokens de color, KYC diferido, inmutabilidad del ledger). Ver
+[`docs/roadmap-arranque.md`](docs/roadmap-arranque.md).

@@ -1,0 +1,159 @@
+/*
+ * VicPay - sistema de tokens de color, superficie, radio y sombra.
+ *
+ * Regla del proyecto: ningun componente debe usar clases de paleta cruda de
+ * Tailwind (bg-blue-500, text-gray-400, border-slate-200, etc). Todo consumo
+ * de color pasa por los tokens definidos aqui, expuestos como utilidades de
+ * Tailwind v4 via @theme (bg-brand-500, text-secondary-600, bg-surface, ...).
+ *
+ * Nota de diseno: la paleta azul (secundario/confianza) se define abajo con
+ * el nombre exacto "--color-blue-*" pedido por el contrato de marca, pero se
+ * expone a Tailwind bajo el alias "secondary-*" (bg-secondary-500, etc). Asi
+ * evitamos que Tailwind genere utilidades literalmente llamadas "blue-500",
+ * que el test de guardia (tokens.guard.test.ts) prohibe en el resto del
+ * codigo por coincidir con el nombre de la paleta cruda por defecto de
+ * Tailwind. El valor sigue viviendo en un solo lugar: --color-blue-*.
+ */
+
+@import 'tailwindcss';
+
+/* Paleta cruda azul (fuente de verdad) y superficies/texto por tema. */
+:root {
+  --color-blue-50: #edf3ff;
+  --color-blue-100: #dce7ff;
+  --color-blue-200: #bfd1ff;
+  --color-blue-300: #94b2ff;
+  --color-blue-400: #6188ff;
+  --color-blue-500: #3b62f6;
+  --color-blue-600: #2544db;
+  --color-blue-700: #1e37b0;
+  --color-blue-800: #1d318a;
+  --color-blue-900: #1c2e6e;
+
+  /* Superficies y texto - tema claro (valor por defecto). */
+  --surface-base: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f6f4f2;
+  --border: #e8e3dd;
+  --text-primary: #1c1815;
+  --text-secondary: #56504a;
+  --text-muted: #8b857d;
+}
+
+/* Tema oscuro por preferencia del sistema (a menos que se fuerce data-theme). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --surface-base: #121110;
+    --surface-raised: #1b1917;
+    --surface-sunken: #0c0b0a;
+    --border: #2e2b28;
+    --text-primary: #f5f2ef;
+    --text-secondary: #c7c1b9;
+    --text-muted: #8d877e;
+  }
+}
+
+/* Overrides explicitos por atributo data-theme (toggle manual). */
+:root[data-theme='dark'] {
+  --surface-base: #121110;
+  --surface-raised: #1b1917;
+  --surface-sunken: #0c0b0a;
+  --border: #2e2b28;
+  --text-primary: #f5f2ef;
+  --text-secondary: #c7c1b9;
+  --text-muted: #8d877e;
+}
+
+:root[data-theme='light'] {
+  --surface-base: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f6f4f2;
+  --border: #e8e3dd;
+  --text-primary: #1c1815;
+  --text-secondary: #56504a;
+  --text-muted: #8b857d;
+}
+
+@theme {
+  /* Marca (naranja) - primario de accion. Hover: brand-600. */
+  --color-brand-50: #fff4ed;
+  --color-brand-100: #ffe6d5;
+  --color-brand-200: #fec6a9;
+  --color-brand-300: #fda172;
+  --color-brand-400: #fb7e43;
+  --color-brand-500: #f85e19;
+  --color-brand-600: #e8460a;
+  --color-brand-700: #c0350c;
+  --color-brand-800: #982c11;
+  --color-brand-900: #7a2711;
+
+  /* Secundario (azul/confianza) - alias seguro de --color-blue-*. */
+  --color-secondary-50: var(--color-blue-50);
+  --color-secondary-100: var(--color-blue-100);
+  --color-secondary-200: var(--color-blue-200);
+  --color-secondary-300: var(--color-blue-300);
+  --color-secondary-400: var(--color-blue-400);
+  --color-secondary-500: var(--color-blue-500);
+  --color-secondary-600: var(--color-blue-600);
+  --color-secondary-700: var(--color-blue-700);
+  --color-secondary-800: var(--color-blue-800);
+  --color-secondary-900: var(--color-blue-900);
+
+  /* Semanticos. */
+  --color-success: #12a150;
+  --color-warning: #e8a005;
+  --color-danger: #e5484d;
+  --color-info: var(--color-blue-500);
+
+  /* Superficies y texto (alias hacia variables por tema definidas arriba). */
+  --color-surface: var(--surface-base);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-border: var(--border);
+  --color-fg: var(--text-primary);
+  --color-fg-secondary: var(--text-secondary);
+  --color-fg-muted: var(--text-muted);
+
+  /* Radios. */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 28px;
+
+  /* Sombras suaves (mismo nombre que las utilidades por defecto de Tailwind). */
+  --shadow-sm: 0 1px 2px 0 rgb(24 20 16 / 0.05), 0 1px 1px 0 rgb(24 20 16 / 0.04);
+  --shadow-md: 0 6px 16px -4px rgb(24 20 16 / 0.1), 0 2px 6px -2px rgb(24 20 16 / 0.06);
+  --shadow-lg: 0 16px 40px -8px rgb(24 20 16 / 0.16), 0 6px 16px -4px rgb(24 20 16 / 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 1px 0 rgb(0 0 0 / 0.3);
+    --shadow-md: 0 6px 16px -4px rgb(0 0 0 / 0.45), 0 2px 6px -2px rgb(0 0 0 / 0.3);
+    --shadow-lg: 0 16px 40px -8px rgb(0 0 0 / 0.55), 0 6px 16px -4px rgb(0 0 0 / 0.35);
+  }
+}
+
+:root[data-theme='dark'] {
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 1px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 6px 16px -4px rgb(0 0 0 / 0.45), 0 2px 6px -2px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 16px 40px -8px rgb(0 0 0 / 0.55), 0 6px 16px -4px rgb(0 0 0 / 0.35);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-surface);
+  color: var(--color-fg);
+  font-family:
+    system-ui,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: light dark;
+}
