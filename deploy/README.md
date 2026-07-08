@@ -5,6 +5,42 @@ Postgres, PgBouncer y la API en la red privada de Docker (sin puertos publicados
 La API corre migraciones como dueno y sirve trafico como el rol de minimo
 privilegio `vicpay_app`, que no puede mutar el journal.
 
+## Prueba local gratis (sin dominio, sin cuenta cloud)
+
+Para verlo funcionando en tu maquina, sin pagar ni esperar a ningun proveedor:
+
+```sh
+docker compose -f deploy/docker-compose.local.yml up --build
+```
+
+Abre http://localhost. Durante el registro, el codigo OTP aparece en los logs:
+
+```sh
+docker compose -f deploy/docker-compose.local.yml logs api | grep "otp dev echo"
+```
+
+Corre en modo desarrollo (HTTP, un solo rol de BD, OTP a log); es solo para tu
+maquina. Para exponerlo a internet usa el stack de produccion de abajo.
+
+## Opcion 100% gratis para publicarlo: Oracle Always Free + DuckDNS
+
+Un servidor publico sin costo:
+
+1. Crea una VM ARM "Always Free" (Ampere A1) en Oracle Cloud, con Ubuntu. La cuenta
+   tarda un rato en aprovisionarse tras el registro; espera el correo de "listo".
+2. En Oracle, abre los puertos 80 y 443 en la Security List (ingress 0.0.0.0/0) y en
+   el firewall del SO (`sudo ufw allow 80/tcp && sudo ufw allow 443/tcp`).
+3. Instala Docker en la VM: `curl -fsSL https://get.docker.com | sh`.
+4. Consigue un subdominio gratis en https://www.duckdns.org (ej. `vicpay.duckdns.org`)
+   y apuntalo a la IP publica de la VM.
+5. `cd deploy && cp .env.production.example .env`, y pon
+   `SITE_ADDRESS=vicpay.duckdns.org`, `SITE_ORIGIN=https://vicpay.duckdns.org` y los
+   secretos. Sigue el bootstrap y el arranque de abajo: Caddy saca el certificado TLS
+   gratis automaticamente para ese subdominio.
+
+Costo: $0. Un dominio propio de marca (mas serio que duckdns) cuesta ~$1-13/ano y
+solo cambia `SITE_ADDRESS`/`SITE_ORIGIN`.
+
 ## Requisitos
 
 - Un VPS con Docker y Docker Compose v2.
