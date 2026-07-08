@@ -1,0 +1,31 @@
+# Caddy serves the built frontend and reverse-proxies the API under the same
+# origin as /api. Serving both from one origin is what makes the httpOnly
+# refresh cookie first-party (the BFF pattern). Caddy also obtains and renews
+# TLS certificates automatically when SITE_ADDRESS is a real domain.
+
+{$SITE_ADDRESS} {
+	encode gzip zstd
+
+	# API under /api -> backend. Strip the prefix so the backend sees its own
+	# routes (/auth/login, /me, ...). The browser's Origin is this site, which
+	# must be listed in the backend CORS_ORIGINS for the CSRF check to pass.
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy {$API_UPSTREAM:api:8080}
+	}
+
+	# Everything else is the single-page app.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		# Sensible security headers for a fintech SPA.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}

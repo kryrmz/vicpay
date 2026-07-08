@@ -45,6 +45,18 @@ type Config struct {
 	// log so a developer can complete the flow without a real SMS provider.
 	// It is refused by ValidateForProduction.
 	OTPDevEcho bool
+
+	// MigrateOnly runs the migrations and exits, without starting the server.
+	// Used to apply the schema (as the owner) before the least-privilege app
+	// role exists, in a single-host deployment.
+	MigrateOnly bool
+
+	// DBTrustedNetwork asserts that DATABASE_URL travels only over a trusted
+	// private network (e.g. a single-host Docker bridge where Postgres is not
+	// publicly exposed). It is the explicit, documented opt-in that lets
+	// ValidateForProduction accept a non-TLS app DSN in that topology. TLS to a
+	// remote/managed database is still required when this is false.
+	DBTrustedNetwork bool
 }
 
 // Load reads configuration from the environment, applying dev defaults.
@@ -63,6 +75,8 @@ func Load() *Config {
 		PIIEncryptKey:     getEnv("PII_ENCRYPTION_KEY", "dev-pii-key-change-me-32bytes-min!"),
 		CORSOrigins:       splitCSV(getEnv("CORS_ORIGINS", "http://localhost:5173,http://localhost:9999")),
 		OTPDevEcho:        getEnvBool("OTP_DEV_ECHO", true),
+		MigrateOnly:       getEnvBool("MIGRATE_ONLY", false),
+		DBTrustedNetwork:  getEnvBool("DB_TRUSTED_NETWORK", false),
 	}
 	return c
 }
@@ -83,8 +97,8 @@ func (c *Config) ValidateForProduction() error {
 	if strings.HasPrefix(c.PIIEncryptKey, "dev-pii-key") || len(c.PIIEncryptKey) < 32 {
 		problems = append(problems, "PII_ENCRYPTION_KEY must be set to a strong value (>=32 bytes)")
 	}
-	if strings.Contains(c.DatabaseURL, "sslmode=disable") {
-		problems = append(problems, "DATABASE_URL must use TLS (sslmode!=disable)")
+	if strings.Contains(c.DatabaseURL, "sslmode=disable") && !c.DBTrustedNetwork {
+		problems = append(problems, "DATABASE_URL must use TLS (sslmode!=disable), or set DB_TRUSTED_NETWORK=true for a private single-host network")
 	}
 	if strings.Contains(c.DatabaseURL, "vicpay_dev") {
 		problems = append(problems, "DATABASE_URL still uses the dev password")

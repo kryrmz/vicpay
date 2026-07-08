@@ -16,6 +16,7 @@ ahorros y marketplace, construidos sobre un ledger de doble entrada real.
 | [`backend/`](backend) | API en Go 1.26 + Postgres: ledger de doble entrada, auth, OTP, KYC, billetera. |
 | [`frontend/`](frontend) | App React 19 + Vite + Tailwind v4 + Capacitor: sistema de diseno, router, onboarding. |
 | [`docs/`](docs) | Brief de producto, roadmap de arranque y decision de nombre/dominio. |
+| [`deploy/`](deploy) | Deploy en un VPS con Docker Compose: Caddy (TLS + BFF), rol de BD de minimo privilegio y runbook. |
 | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | CI: gate de verificacion de backend y frontend. |
 
 ## Backend (`backend/`)
@@ -58,6 +59,17 @@ npm run typecheck && npm run lint && npm run test && npm run build
 ```
 
 Cuenta sembrada para ver la UI con datos: `+50688888888` / `VicPay#2026`.
+
+Contra el backend real, construir/servir con `VITE_API_BASE=/api` tras el proxy BFF
+(en dev, `VITE_API_BASE=/api npm run dev` usa el proxy de Vite hacia `localhost:8080`).
+
+## Deploy
+
+Para un VPS con Docker Compose ver [`deploy/README.md`](deploy/README.md): Caddy termina
+TLS y sirve el front proxyando `/api` (cookie httpOnly first-party), Postgres y PgBouncer
+quedan en la red privada, y la app corre como un rol de BD de minimo privilegio que no puede
+mutar el journal. Falta para un lanzamiento real: proveedor de SMS, endpoints de movimiento
+de dinero, y la via regulatoria.
 
 ## Limite regulatorio
 

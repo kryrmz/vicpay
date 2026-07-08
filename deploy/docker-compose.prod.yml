@@ -1,0 +1,87 @@
+# Production stack for a single VPS. Only the web tier (Caddy) is exposed to the
+# internet; Postgres and PgBouncer live on the private Docker network and are
+# never published. TLS terminates at Caddy. The API talks to Postgres through
+# PgBouncer (transaction mode) as the least-privilege role vicpay_app, and runs
+# migrations directly against Postgres as the owner.
+#
+# Secrets come from deploy/.env (see .env.production.example). See README.md for
+# the one-time bootstrap order (migrate -> create app role -> start).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vicpay
+      POSTGRES_PASSWORD: ${OWNER_DB_PASSWORD}
+      POSTGRES_DB: vicpay
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vicpay"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # No published ports: reachable only on the private network.
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: vicpay_app
+      DB_PASSWORD: ${APP_DB_PASSWORD}
+      DB_NAME: vicpay
+      POOL_MODE: transaction
+      AUTH_TYPE: scram-sha-256
+      MAX_CLIENT_CONN: "500"
+      DEFAULT_POOL_SIZE: "25"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      PORT: "8080"
+      # App traffic: least-privilege role via PgBouncer (transaction mode).
+      DATABASE_URL: postgres://vicpay_app:${APP_DB_PASSWORD}@pgbouncer:6432/vicpay?sslmode=disable
+      # Migrations + advisory locks: direct to Postgres as the owner.
+      DATABASE_DIRECT_URL: postgres://vicpay:${OWNER_DB_PASSWORD}@postgres:5432/vicpay?sslmode=disable
+      # DATABASE_URL is non-TLS but stays on the private Docker network.
+      DB_TRUSTED_NETWORK: "true"
+      JWT_SECRET: ${JWT_SECRET}
+      PII_ENCRYPTION_KEY: ${PII_ENCRYPTION_KEY}
+      CORS_ORIGINS: ${SITE_ORIGIN}
+      OTP_DEV_ECHO: "false"
+      MIGRATIONS_DIR: /app/migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+      API_UPSTREAM: api:8080
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

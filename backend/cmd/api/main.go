@@ -57,6 +57,13 @@ func run(logger *slog.Logger) error {
 	}
 	logger.Info("migrations applied")
 
+	// In a single-host deploy the schema is applied (as the owner) before the
+	// least-privilege app role exists; this mode exits right after migrating.
+	if cfg.MigrateOnly {
+		logger.Info("migrate-only mode: exiting after migrations")
+		return nil
+	}
+
 	// Application traffic uses the app pool, which may go through PgBouncer.
 	appPool, err := database.NewPool(ctx, cfg.DatabaseURL, 25)
 	if err != nil {

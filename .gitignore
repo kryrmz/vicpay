@@ -13,6 +13,8 @@ bin/
 .env
 .env.*
 !.env.example
+!*.env.example
+!.env.production.example
 
 # Herramientas locales / worktrees (NUNCA versionar)
 .claude/
