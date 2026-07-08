@@ -1,0 +1,60 @@
+# Local development stack. PgBouncer is included from day one (transaction mode)
+# so the application path exercises the pooler that production uses. The API
+# talks to PgBouncer for normal traffic (DATABASE_URL) but connects DIRECTLY to
+# Postgres for migrations and session advisory locks (DATABASE_DIRECT_URL),
+# which are unsafe through a transactional pooler.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: vicpay
+      POSTGRES_PASSWORD: vicpay_dev
+      POSTGRES_DB: vicpay
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vicpay"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: vicpay
+      DB_PASSWORD: vicpay_dev
+      DB_NAME: vicpay
+      POOL_MODE: transaction
+      AUTH_TYPE: scram-sha-256
+      MAX_CLIENT_CONN: "200"
+      DEFAULT_POOL_SIZE: "25"
+    ports:
+      - "6432:6432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: .
+    environment:
+      ENVIRONMENT: development
+      PORT: "8080"
+      # App traffic goes through PgBouncer (transaction mode).
+      DATABASE_URL: postgres://vicpay:vicpay_dev@pgbouncer:6432/vicpay?sslmode=disable
+      # Migrations and advisory locks go DIRECT to Postgres.
+      DATABASE_DIRECT_URL: postgres://vicpay:vicpay_dev@postgres:5432/vicpay?sslmode=disable
+      JWT_SECRET: dev-secret-change-in-production-000
+      PII_ENCRYPTION_KEY: dev-pii-key-change-me-32bytes-min!
+      CORS_ORIGINS: http://localhost:5173,http://localhost:9999
+      OTP_DEV_ECHO: "true"
+      MIGRATIONS_DIR: /app/migrations
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_started
