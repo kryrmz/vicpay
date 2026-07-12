@@ -85,4 +85,11 @@ export interface Api {
   ): Promise<TransferResult>
   /** Recarga demo: acredita la billetera propia (solo entornos no productivos). */
   topUp(amountMinor: number, currency: CurrencyCode, idempotencyKey?: string): Promise<TransferResult>
+  /** Paga una solicitud de cobro (QR) al usuario identificado por id. */
+  payRequest(
+    toUserId: string,
+    amountMinor: number,
+    currency: CurrencyCode,
+    idempotencyKey?: string,
+  ): Promise<TransferResult>
 }

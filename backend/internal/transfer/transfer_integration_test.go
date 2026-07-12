@@ -100,6 +100,31 @@ func TestTransferSelfAndUnknownAndUnverified(t *testing.T) {
 	}
 }
 
+func TestTransferToUserByID(t *testing.T) {
+	svc, pool, cipher := newService(t)
+	ctx := context.Background()
+	alice := createUser(t, pool, cipher, "+50688881111", true)
+	bob := createUser(t, pool, cipher, "+50688882222", true)
+
+	if _, err := svc.TopUp(ctx, alice, 10000, "USD", "t"); err != nil {
+		t.Fatalf("topup: %v", err)
+	}
+	res, err := svc.TransferToUser(ctx, alice, bob, 2500, "USD", "qr-1")
+	if err != nil {
+		t.Fatalf("transfer to user: %v", err)
+	}
+	if res.NewBalanceMinor != 7500 {
+		t.Fatalf("balance = %d, want 7500", res.NewBalanceMinor)
+	}
+	// Unknown and self recipients are rejected.
+	if _, err := svc.TransferToUser(ctx, alice, "00000000-0000-0000-0000-000000000000", 100, "USD", "u"); !errors.Is(err, transfer.ErrRecipientNotFound) {
+		t.Fatalf("expected ErrRecipientNotFound, got %v", err)
+	}
+	if _, err := svc.TransferToUser(ctx, alice, alice, 100, "USD", "s"); !errors.Is(err, transfer.ErrSelfTransfer) {
+		t.Fatalf("expected ErrSelfTransfer, got %v", err)
+	}
+}
+
 func TestTransferKYCLimit(t *testing.T) {
 	svc, pool, cipher := newService(t)
 	ctx := context.Background()

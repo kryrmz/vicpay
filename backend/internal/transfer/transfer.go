@@ -74,13 +74,43 @@ func (s *Service) Transfer(ctx context.Context, fromUserID, toPhone string, amou
 	if recipientID == "" {
 		return nil, ErrRecipientNotFound
 	}
-	if recipientID == fromUserID {
-		return nil, ErrSelfTransfer
-	}
 	if !verified {
 		return nil, ErrRecipientUnverified
 	}
+	return s.execute(ctx, fromUserID, recipientID, amountMinor, currency, idempotencyKey)
+}
 
+// TransferToUser sends money to a recipient identified directly by user id, used
+// by QR payment requests (which carry the payee's user id, not their phone).
+func (s *Service) TransferToUser(ctx context.Context, fromUserID, toUserID string, amountMinor int64, currency, idempotencyKey string) (*Result, error) {
+	if amountMinor <= 0 {
+		return nil, ErrInvalidAmount
+	}
+	if !money.IsSupported(money.Currency(currency)) {
+		return nil, ErrUnsupportedCurrency
+	}
+	if _, err := uuid.Parse(toUserID); err != nil {
+		return nil, ErrRecipientNotFound
+	}
+	rec, err := s.userByID(ctx, toUserID)
+	if err != nil {
+		return nil, err
+	}
+	if !rec.exists {
+		return nil, ErrRecipientNotFound
+	}
+	if !rec.phoneVerified {
+		return nil, ErrRecipientUnverified
+	}
+	return s.execute(ctx, fromUserID, toUserID, amountMinor, currency, idempotencyKey)
+}
+
+// execute runs the shared money-movement path once the recipient is resolved:
+// self-check, balance check, KYC limits, then a balanced ledger posting.
+func (s *Service) execute(ctx context.Context, fromUserID, recipientID string, amountMinor int64, currency, idempotencyKey string) (*Result, error) {
+	if recipientID == fromUserID {
+		return nil, ErrSelfTransfer
+	}
 	balance, err := s.engine.WalletBalanceMinor(ctx, fromUserID, currency)
 	if err != nil {
 		return nil, err
@@ -88,11 +118,9 @@ func (s *Service) Transfer(ctx context.Context, fromUserID, toPhone string, amou
 	if balance < amountMinor {
 		return nil, ErrInsufficientFunds
 	}
-
 	if err := s.checkLimits(ctx, fromUserID, currency, amountMinor); err != nil {
 		return nil, err
 	}
-
 	posting, err := s.engine.Post(ctx, ledger.PostingInput{
 		IdempotencyKey: keyOrRandom(idempotencyKey),
 		Description:    "p2p transfer",
@@ -150,6 +178,24 @@ func (s *Service) userByPhone(ctx context.Context, phone string) (string, bool, 
 		return "", false, err
 	}
 	return id, verified, nil
+}
+
+type recipient struct {
+	exists        bool
+	phoneVerified bool
+}
+
+// userByID resolves a recipient's existence and verification flag by user id.
+func (s *Service) userByID(ctx context.Context, id string) (recipient, error) {
+	var verified bool
+	err := s.pool.QueryRow(ctx, `SELECT phone_verified FROM users WHERE id = $1`, id).Scan(&verified)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return recipient{}, nil
+	}
+	if err != nil {
+		return recipient{}, err
+	}
+	return recipient{exists: true, phoneVerified: verified}, nil
 }
 
 // checkLimits enforces the sender's KYC daily and monthly spending ceilings.

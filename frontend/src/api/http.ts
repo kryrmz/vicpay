@@ -180,6 +180,13 @@ export function createHttpApi(baseUrl: string): Api {
         body: JSON.stringify({ amountMinor, currency, idempotencyKey }),
       })
     },
+
+    async payRequest(toUserId, amountMinor, currency, idempotencyKey): Promise<TransferResult> {
+      return authed<TransferResult>('/transfers', {
+        method: 'POST',
+        body: JSON.stringify({ toUserId, amountMinor, currency, idempotencyKey }),
+      })
+    },
   }
 }
 

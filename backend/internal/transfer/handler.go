@@ -21,6 +21,7 @@ func NewHandler(svc *Service, demoEnabled bool) *Handler {
 
 type transferReq struct {
 	ToPhone        string `json:"toPhone"`
+	ToUserID       string `json:"toUserId"`
 	AmountMinor    int64  `json:"amountMinor"`
 	Currency       string `json:"currency"`
 	IdempotencyKey string `json:"idempotencyKey"`
@@ -43,7 +44,16 @@ func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 	if !response.Decode(w, r, &req) {
 		return
 	}
-	res, err := h.svc.Transfer(r.Context(), userID, req.ToPhone, req.AmountMinor, req.Currency, req.IdempotencyKey)
+	// A QR payment carries the payee's user id; a manual send carries a phone.
+	var (
+		res *Result
+		err error
+	)
+	if req.ToUserID != "" {
+		res, err = h.svc.TransferToUser(r.Context(), userID, req.ToUserID, req.AmountMinor, req.Currency, req.IdempotencyKey)
+	} else {
+		res, err = h.svc.Transfer(r.Context(), userID, req.ToPhone, req.AmountMinor, req.Currency, req.IdempotencyKey)
+	}
 	if err != nil {
 		writeTransferError(w, err)
 		return

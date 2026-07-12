@@ -190,6 +190,57 @@ function addTransaction(userId: string, tx: Transaction): void {
   db.transactionsByUserId.set(userId, [tx, ...txs])
 }
 
+/** Ejecuta el movimiento una vez resuelto el destinatario (saldo, asientos, idempotencia). */
+function executeTransfer(
+  sender: StoredUser,
+  recipient: StoredUser,
+  amountMinor: number,
+  currency: CurrencyCode,
+  idempotencyKey?: string,
+): TransferResult {
+  if (idempotencyKey) {
+    const prior = db.idempotency.get(idempotencyKey)
+    if (prior) {
+      return prior
+    }
+  }
+  if (recipient.id === sender.id) {
+    throw new ApiError('No puedes enviarte dinero a ti mismo.')
+  }
+  if (amountMinor <= 0) {
+    throw new ApiError('El monto debe ser mayor que cero.')
+  }
+  if (walletBalance(sender.id, currency) < amountMinor) {
+    throw new ApiError('Saldo insuficiente.')
+  }
+  const newBalance = adjustWallet(sender.id, currency, -amountMinor)
+  adjustWallet(recipient.id, currency, amountMinor)
+  const now = new Date().toISOString()
+  addTransaction(sender.id, {
+    id: generateId('tx'),
+    kind: 'out',
+    counterparty: recipient.phoneMasked,
+    amountMinor,
+    currency,
+    createdAt: now,
+    category: 'transfer',
+  })
+  addTransaction(recipient.id, {
+    id: generateId('tx'),
+    kind: 'in',
+    counterparty: sender.phoneMasked,
+    amountMinor,
+    currency,
+    createdAt: now,
+    category: 'transfer',
+  })
+  const result: TransferResult = { postingId: generateId('pst'), newBalanceMinor: newBalance, currency }
+  if (idempotencyKey) {
+    db.idempotency.set(idempotencyKey, result)
+  }
+  return result
+}
+
 export const mockApi: Api = {
   async register(phone, password) {
     await delay()
@@ -275,55 +326,24 @@ export const mockApi: Api = {
   async transfer(toPhone, amountMinor, currency, idempotencyKey) {
     await delay()
     const sender = requireSession()
-    if (amountMinor <= 0) {
-      throw new ApiError('El monto debe ser mayor que cero.')
-    }
     if (!E164_PATTERN.test(toPhone)) {
       throw new ApiError('El telefono del destinatario debe estar en formato E.164.')
-    }
-    if (idempotencyKey) {
-      const prior = db.idempotency.get(idempotencyKey)
-      if (prior) {
-        return prior
-      }
     }
     const recipient = db.usersByPhone.get(toPhone)
     if (!recipient) {
       throw new ApiError('No hay ninguna cuenta con ese numero.')
     }
-    if (recipient.id === sender.id) {
-      throw new ApiError('No puedes enviarte dinero a ti mismo.')
-    }
-    if (walletBalance(sender.id, currency) < amountMinor) {
-      throw new ApiError('Saldo insuficiente.')
-    }
+    return executeTransfer(sender, recipient, amountMinor, currency, idempotencyKey)
+  },
 
-    const newBalance = adjustWallet(sender.id, currency, -amountMinor)
-    adjustWallet(recipient.id, currency, amountMinor)
-    const now = new Date().toISOString()
-    addTransaction(sender.id, {
-      id: generateId('tx'),
-      kind: 'out',
-      counterparty: recipient.phoneMasked,
-      amountMinor,
-      currency,
-      createdAt: now,
-      category: 'transfer',
-    })
-    addTransaction(recipient.id, {
-      id: generateId('tx'),
-      kind: 'in',
-      counterparty: sender.phoneMasked,
-      amountMinor,
-      currency,
-      createdAt: now,
-      category: 'transfer',
-    })
-    const result: TransferResult = { postingId: generateId('pst'), newBalanceMinor: newBalance, currency }
-    if (idempotencyKey) {
-      db.idempotency.set(idempotencyKey, result)
+  async payRequest(toUserId, amountMinor, currency, idempotencyKey) {
+    await delay()
+    const sender = requireSession()
+    const recipient = db.usersById.get(toUserId)
+    if (!recipient) {
+      throw new ApiError('El cobro apunta a una cuenta que no existe.')
     }
-    return result
+    return executeTransfer(sender, recipient, amountMinor, currency, idempotencyKey)
   },
 
   async topUp(amountMinor, currency, idempotencyKey) {

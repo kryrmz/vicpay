@@ -108,6 +108,19 @@ describe('mockApi', () => {
     await expect(api.transfer('+50670001113', 99_999_999, 'USD', 'i')).rejects.toThrow()
   })
 
+  it('payRequest() paga a un usuario por id (flujo de cobro QR)', async () => {
+    const api = await freshApi()
+    const { pendingUserId } = await api.register('+50670002222', 'contrasenaSegura')
+    const recipient = await api.verifyPhone(pendingUserId, '000000')
+    await api.login('+50688888888', 'VicPay#2026')
+    const before = await usdBalance(api)
+
+    const res = await api.payRequest(recipient.user.id, 3000, 'USD', 'qr1')
+
+    expect(res.newBalanceMinor).toBe(before - 3000)
+    expect(await usdBalance(api)).toBe(before - 3000)
+  })
+
   it('topUp() acredita la billetera del usuario', async () => {
     const api = await freshApi()
     await api.login('+50688888888', 'VicPay#2026')
