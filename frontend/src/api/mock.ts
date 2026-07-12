@@ -1,5 +1,14 @@
 import { ApiError } from './types'
-import type { Api, CurrencyCode, PendingRegistration, Session, Transaction, User, Wallet } from './types'
+import type {
+  Api,
+  CurrencyCode,
+  PendingRegistration,
+  Session,
+  Transaction,
+  TransferResult,
+  User,
+  Wallet,
+} from './types'
 
 /** Codigo de un solo uso fijo para el mock. Nunca se devuelve al cliente. */
 const FIXED_OTP_CODE = '000000'
@@ -119,6 +128,7 @@ class MockDatabase {
   pendingByToken = new Map<string, PendingRecord>()
   walletsByUserId = new Map<string, Wallet[]>()
   transactionsByUserId = new Map<string, Transaction[]>()
+  idempotency = new Map<string, TransferResult>()
   currentUserId: string | null = null
 
   constructor() {
@@ -156,6 +166,28 @@ function requireSession(): StoredUser {
     throw new ApiError('No hay una sesion activa.')
   }
   return user
+}
+
+function walletBalance(userId: string, currency: CurrencyCode): number {
+  return (db.walletsByUserId.get(userId) ?? []).find((w) => w.currency === currency)?.balanceMinor ?? 0
+}
+
+function adjustWallet(userId: string, currency: CurrencyCode, deltaMinor: number): number {
+  const wallets = db.walletsByUserId.get(userId) ?? []
+  const existing = wallets.find((w) => w.currency === currency)
+  if (existing) {
+    existing.balanceMinor += deltaMinor
+    db.walletsByUserId.set(userId, wallets)
+    return existing.balanceMinor
+  }
+  const created: Wallet = { currency, balanceMinor: deltaMinor }
+  db.walletsByUserId.set(userId, [...wallets, created])
+  return created.balanceMinor
+}
+
+function addTransaction(userId: string, tx: Transaction): void {
+  const txs = db.transactionsByUserId.get(userId) ?? []
+  db.transactionsByUserId.set(userId, [tx, ...txs])
 }
 
 export const mockApi: Api = {
@@ -238,5 +270,88 @@ export const mockApi: Api = {
     const user = requireSession()
     const transactions = db.transactionsByUserId.get(user.id) ?? []
     return [...transactions].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  },
+
+  async transfer(toPhone, amountMinor, currency, idempotencyKey) {
+    await delay()
+    const sender = requireSession()
+    if (amountMinor <= 0) {
+      throw new ApiError('El monto debe ser mayor que cero.')
+    }
+    if (!E164_PATTERN.test(toPhone)) {
+      throw new ApiError('El telefono del destinatario debe estar en formato E.164.')
+    }
+    if (idempotencyKey) {
+      const prior = db.idempotency.get(idempotencyKey)
+      if (prior) {
+        return prior
+      }
+    }
+    const recipient = db.usersByPhone.get(toPhone)
+    if (!recipient) {
+      throw new ApiError('No hay ninguna cuenta con ese numero.')
+    }
+    if (recipient.id === sender.id) {
+      throw new ApiError('No puedes enviarte dinero a ti mismo.')
+    }
+    if (walletBalance(sender.id, currency) < amountMinor) {
+      throw new ApiError('Saldo insuficiente.')
+    }
+
+    const newBalance = adjustWallet(sender.id, currency, -amountMinor)
+    adjustWallet(recipient.id, currency, amountMinor)
+    const now = new Date().toISOString()
+    addTransaction(sender.id, {
+      id: generateId('tx'),
+      kind: 'out',
+      counterparty: recipient.phoneMasked,
+      amountMinor,
+      currency,
+      createdAt: now,
+      category: 'transfer',
+    })
+    addTransaction(recipient.id, {
+      id: generateId('tx'),
+      kind: 'in',
+      counterparty: sender.phoneMasked,
+      amountMinor,
+      currency,
+      createdAt: now,
+      category: 'transfer',
+    })
+    const result: TransferResult = { postingId: generateId('pst'), newBalanceMinor: newBalance, currency }
+    if (idempotencyKey) {
+      db.idempotency.set(idempotencyKey, result)
+    }
+    return result
+  },
+
+  async topUp(amountMinor, currency, idempotencyKey) {
+    await delay()
+    const user = requireSession()
+    if (amountMinor <= 0) {
+      throw new ApiError('El monto debe ser mayor que cero.')
+    }
+    if (idempotencyKey) {
+      const prior = db.idempotency.get(idempotencyKey)
+      if (prior) {
+        return prior
+      }
+    }
+    const newBalance = adjustWallet(user.id, currency, amountMinor)
+    addTransaction(user.id, {
+      id: generateId('tx'),
+      kind: 'in',
+      counterparty: 'Recarga demo',
+      amountMinor,
+      currency,
+      createdAt: new Date().toISOString(),
+      category: 'topup',
+    })
+    const result: TransferResult = { postingId: generateId('pst'), newBalanceMinor: newBalance, currency }
+    if (idempotencyKey) {
+      db.idempotency.set(idempotencyKey, result)
+    }
+    return result
   },
 }

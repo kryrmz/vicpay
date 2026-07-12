@@ -30,3 +30,17 @@ export function formatMoney(amountMinor: number, currency: string, locale?: stri
     currencyDisplay: 'symbol',
   }).format(amountMajor)
 }
+
+/**
+ * Convierte un monto escrito por el usuario en unidades mayores (p.ej. "12.34")
+ * a unidades menores enteras (1234). Acepta coma o punto como separador decimal
+ * y hasta dos decimales. Devuelve null si la entrada no es un monto valido > 0.
+ */
+export function parseAmountToMinor(input: string): number | null {
+  const normalized = input.trim().replace(',', '.')
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
+    return null
+  }
+  const minor = Math.round(Number(normalized) * 100)
+  return minor > 0 ? minor : null
+}

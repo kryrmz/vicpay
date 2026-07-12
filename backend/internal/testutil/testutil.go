@@ -58,6 +58,16 @@ func SetupDB(t *testing.T) *pgxpool.Pool {
 	if _, err := pool.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
 		t.Fatalf("create schema: %v", err)
 	}
+	// pgcrypto is a database-global extension shared by every test schema.
+	// `CREATE EXTENSION IF NOT EXISTS` is not atomic, so concurrent test packages
+	// can collide on pg_extension; serialize its creation with an advisory lock
+	// so the per-schema migrations below only ever see it already present.
+	if _, err := pool.Exec(ctx, `BEGIN;
+		SELECT pg_advisory_xact_lock(987654321);
+		CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
+		COMMIT;`); err != nil {
+		t.Fatalf("ensure pgcrypto: %v", err)
+	}
 	for _, file := range migrationFiles(t) {
 		sqlBytes, err := os.ReadFile(file)
 		if err != nil {

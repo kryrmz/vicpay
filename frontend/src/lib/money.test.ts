@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatMoney } from './money'
+import { formatMoney, parseAmountToMinor } from './money'
 
 describe('formatMoney', () => {
   it('formatea USD con el locale por defecto (en-US)', () => {
@@ -27,5 +27,23 @@ describe('formatMoney', () => {
 
   it('lanza un error si el monto no es un entero (nunca floats en unidades menores)', () => {
     expect(() => formatMoney(12.5, 'USD')).toThrow()
+  })
+})
+
+describe('parseAmountToMinor', () => {
+  it('convierte unidades mayores a menores enteras', () => {
+    expect(parseAmountToMinor('12.34')).toBe(1234)
+    expect(parseAmountToMinor('100')).toBe(10000)
+    expect(parseAmountToMinor('0.05')).toBe(5)
+  })
+
+  it('acepta coma como separador decimal', () => {
+    expect(parseAmountToMinor('12,34')).toBe(1234)
+  })
+
+  it('rechaza entradas invalidas o no positivas', () => {
+    for (const bad of ['', '0', '0.00', '-5', 'abc', '1.234', '1.2.3']) {
+      expect(parseAmountToMinor(bad)).toBeNull()
+    }
   })
 })

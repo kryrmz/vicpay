@@ -15,6 +15,7 @@ import type {
   Session,
   Transaction,
   TransactionCategory,
+  TransferResult,
   User,
   Wallet,
 } from './types'
@@ -164,6 +165,20 @@ export function createHttpApi(baseUrl: string): Api {
         createdAt: t.createdAt,
         category: normalizeCategory(t.category),
       }))
+    },
+
+    async transfer(toPhone, amountMinor, currency, idempotencyKey): Promise<TransferResult> {
+      return authed<TransferResult>('/transfers', {
+        method: 'POST',
+        body: JSON.stringify({ toPhone, amountMinor, currency, idempotencyKey }),
+      })
+    },
+
+    async topUp(amountMinor, currency, idempotencyKey): Promise<TransferResult> {
+      return authed<TransferResult>('/wallets/topup', {
+        method: 'POST',
+        body: JSON.stringify({ amountMinor, currency, idempotencyKey }),
+      })
     },
   }
 }

@@ -22,9 +22,11 @@ import (
 	"github.com/vicpay/backend/internal/authstore"
 	"github.com/vicpay/backend/internal/config"
 	"github.com/vicpay/backend/internal/database"
+	"github.com/vicpay/backend/internal/ledger"
 	"github.com/vicpay/backend/internal/middleware"
 	"github.com/vicpay/backend/internal/otp"
 	"github.com/vicpay/backend/internal/pii"
+	"github.com/vicpay/backend/internal/transfer"
 	"github.com/vicpay/backend/internal/wallet"
 	pkgjwt "github.com/vicpay/backend/pkg/jwt"
 	"github.com/vicpay/backend/pkg/response"
@@ -90,9 +92,11 @@ func run(logger *slog.Logger) error {
 	cookies := auth.NewCookieWriter(!cfg.IsDevelopment(), cfg.RefreshTTL)
 	authHandler := auth.NewHandler(authSvc, cookies)
 
+	engine := ledger.New(appPool)
 	walletHandler := wallet.NewHandler(wallet.NewService(appPool))
+	transferHandler := transfer.NewHandler(transfer.NewService(appPool, engine, cipher), cfg.IsDevelopment())
 
-	router := buildRouter(cfg, logger, jwtMgr, authHandler, walletHandler)
+	router := buildRouter(cfg, logger, jwtMgr, authHandler, walletHandler, transferHandler)
 
 	srv := &http.Server{
 		Addr:              netAddr(cfg.Port),
@@ -111,6 +115,7 @@ func buildRouter(
 	jwtMgr *pkgjwt.Manager,
 	authHandler *auth.Handler,
 	walletHandler *wallet.Handler,
+	transferHandler *transfer.Handler,
 ) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestIDMiddleware)
@@ -153,6 +158,8 @@ func buildRouter(
 		protected.Get("/me", authHandler.Me)
 		protected.Get("/wallets", walletHandler.Balances)
 		protected.Get("/transactions", walletHandler.Transactions)
+		protected.Post("/transfers", transferHandler.Transfer)
+		protected.Post("/wallets/topup", transferHandler.TopUp)
 	})
 
 	return r

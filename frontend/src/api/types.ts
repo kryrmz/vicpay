@@ -44,6 +44,12 @@ export interface Transaction {
   category: TransactionCategory
 }
 
+export interface TransferResult {
+  postingId: string
+  newBalanceMinor: number
+  currency: CurrencyCode
+}
+
 export class ApiError extends Error {
   constructor(message: string) {
     super(message)
@@ -70,4 +76,13 @@ export interface Api {
   me(): Promise<User>
   listWallets(): Promise<Wallet[]>
   listTransactions(): Promise<Transaction[]>
+  /** Envia dinero a otro usuario por telefono. El monto es en unidades menores. */
+  transfer(
+    toPhone: string,
+    amountMinor: number,
+    currency: CurrencyCode,
+    idempotencyKey?: string,
+  ): Promise<TransferResult>
+  /** Recarga demo: acredita la billetera propia (solo entornos no productivos). */
+  topUp(amountMinor: number, currency: CurrencyCode, idempotencyKey?: string): Promise<TransferResult>
 }

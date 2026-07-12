@@ -8,6 +8,18 @@ async function freshApi(): Promise<Api> {
   return mod.mockApi
 }
 
+async function usdBalance(api: Api): Promise<number> {
+  const wallets = await api.listWallets()
+  return wallets.find((w) => w.currency === 'USD')?.balanceMinor ?? 0
+}
+
+/** Crea y verifica un destinatario; deja la sesion en el usuario demo con saldo. */
+async function withRecipient(api: Api, phone: string): Promise<void> {
+  const { pendingUserId } = await api.register(phone, 'contrasenaSegura')
+  await api.verifyPhone(pendingUserId, '000000')
+  await api.login('+50688888888', 'VicPay#2026')
+}
+
 describe('mockApi', () => {
   it('register() nunca devuelve el codigo OTP', async () => {
     const api = await freshApi()
@@ -63,5 +75,47 @@ describe('mockApi', () => {
     for (const transaction of transactions) {
       expect(Number.isInteger(transaction.amountMinor)).toBe(true)
     }
+  })
+
+  it('transfer() descuenta del emisor y acredita al destinatario', async () => {
+    const api = await freshApi()
+    await withRecipient(api, '+50670001111')
+    const before = await usdBalance(api)
+
+    const res = await api.transfer('+50670001111', 5000, 'USD', 'k1')
+
+    expect(res.newBalanceMinor).toBe(before - 5000)
+    expect(await usdBalance(api)).toBe(before - 5000)
+  })
+
+  it('transfer() es idempotente con la misma clave (no doble debito)', async () => {
+    const api = await freshApi()
+    await withRecipient(api, '+50670001112')
+    const before = await usdBalance(api)
+
+    await api.transfer('+50670001112', 5000, 'USD', 'dup')
+    await api.transfer('+50670001112', 5000, 'USD', 'dup')
+
+    expect(await usdBalance(api)).toBe(before - 5000)
+  })
+
+  it('transfer() rechaza autoenvio, destinatario inexistente y saldo insuficiente', async () => {
+    const api = await freshApi()
+    await withRecipient(api, '+50670001113')
+
+    await expect(api.transfer('+50688888888', 100, 'USD', 's')).rejects.toThrow()
+    await expect(api.transfer('+50670009999', 100, 'USD', 'n')).rejects.toThrow()
+    await expect(api.transfer('+50670001113', 99_999_999, 'USD', 'i')).rejects.toThrow()
+  })
+
+  it('topUp() acredita la billetera del usuario', async () => {
+    const api = await freshApi()
+    await api.login('+50688888888', 'VicPay#2026')
+    const before = await usdBalance(api)
+
+    const res = await api.topUp(10000, 'USD', 't1')
+
+    expect(res.newBalanceMinor).toBe(before + 10000)
+    expect(await usdBalance(api)).toBe(before + 10000)
   })
 })
